@@ -1,4 +1,5 @@
 import { supabase } from "./supabase";
+import { MANGA_SOURCE_IDS, normalizeMangaSourceId } from "./sources/source-ids";
 
 export interface CreatorProfile {
     wallet_address: string;
@@ -23,7 +24,7 @@ export interface TipRecord {
 export async function getCreatorProfile(walletAddressOrAuthorId: string): Promise<CreatorProfile | null> {
     if (!supabase) return null;
 
-    // Try to fetch by wallet_address or mangadex_author_id
+    // Try to fetch by wallet_address or content author ID
     const { data, error } = await supabase
         .from("creator_profiles")
         .select("*")
@@ -38,13 +39,30 @@ export async function getCreatorProfile(walletAddressOrAuthorId: string): Promis
     return data || null;
 }
 
+export async function getCreatorProfileByContentAuthor(sourceId: string, contentAuthorId: string): Promise<CreatorProfile | null> {
+    if (normalizeMangaSourceId(sourceId) !== MANGA_SOURCE_IDS.MANGADEX) {
+        return null;
+    }
+
+    return getCreatorProfile(contentAuthorId);
+}
+
+export type SubmitCreatorApplicationResult =
+    | { ok: true }
+    | { ok: false; message: string };
+
 export async function submitCreatorApplication(
     walletAddress: string,
     displayName: string,
     bio: string,
-    mangadexAuthorId: string | null
-): Promise<boolean> {
-    if (!supabase) return false;
+    contentAuthorId: string | null
+): Promise<SubmitCreatorApplicationResult> {
+    if (!supabase) {
+        return {
+            ok: false,
+            message: "Server unavailable, try again in a moment.",
+        };
+    }
 
     const { error } = await supabase
         .from("creator_profiles")
@@ -52,16 +70,19 @@ export async function submitCreatorApplication(
             wallet_address: walletAddress,
             display_name: displayName,
             bio: bio,
-            mangadex_author_id: mangadexAuthorId,
+            mangadex_author_id: contentAuthorId,
             is_verified: false, // Default to false until manually approved or via automated system
             updated_at: new Date().toISOString(),
         }, { onConflict: "wallet_address" });
 
     if (error) {
         console.error("Error submitting creator application:", error);
-        return false;
+        return {
+            ok: false,
+            message: error.message || "Failed to submit creator application.",
+        };
     }
-    return true;
+    return { ok: true };
 }
 
 export async function recordTip(

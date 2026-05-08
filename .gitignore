@@ -61,30 +61,4 @@ Cargo.lock
 *.p8
 ExportOptions.plist
 
-# Docs & Supabase SQL — keep local only (not in repo)
-*.md
-!TERMS.md
-!PRIVACY.md
-!COPYRIGHT.md
-supabase*.sql
-comments_schema.sql
 
-# reference repos
-aniyomi-main/
-
-# backend
-backend/node_modules/
-backend/dist/
-backend/.env
-
-# Docs & Supabase SQL — keep local only (not in repo)
-*.md
-!TERMS.md
-!PRIVACY.md
-!COPYRIGHT.md
-supabase*.sql
-comments_schema.sql
-
-# private source providers
-src/lib/sources/hianime.ts
-src/lib/sources/megacloud.ts

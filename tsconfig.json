@@ -1,7 +1,11 @@
 {
   "compilerOptions": {
     "target": "ES2020",
-    "lib": ["dom", "dom.iterable", "esnext"],
+    "lib": [
+      "dom",
+      "dom.iterable",
+      "esnext"
+    ],
     "allowJs": true,
     "skipLibCheck": true,
     "strict": true,
@@ -19,7 +23,9 @@
       }
     ],
     "paths": {
-      "@/*": ["./src/*"]
+      "@/*": [
+        "./src/*"
+      ]
     }
   },
   "include": [
@@ -34,6 +40,7 @@
     "node_modules",
     "backend",
     "src/lib/sources/hianime.ts",
-    "src/lib/sources/megacloud.ts"
+    "src/lib/sources/megacloud.ts",
+    "supabase"
   ]
 }

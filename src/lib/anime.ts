@@ -19,6 +19,7 @@ export interface AnimeResult {
     type?: string;
     releaseDate?: string;
     score?: number;
+    year?: number | null;
 }
 
 export interface AnimeInfo extends AnimeResult {

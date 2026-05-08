@@ -48,7 +48,9 @@
     "next": "16.1.6",
     "react": "19.2.3",
     "react-dom": "19.2.3",
-    "tweetnacl": "^1.0.3"
+    "tweetnacl": "^1.0.3",
+    "ethers": "^6.16.0",
+    "@mayanfinance/swap-sdk": "^13.3.0"
   },
   "devDependencies": {
     "@types/bn.js": "^5.2.0",
