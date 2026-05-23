@@ -1,6 +1,7 @@
 import type { AnimeResult, AnimeInfo } from "./anime";
 
 export const PSYOP_ID = "psyopanime";
+export const BURNIE_SENDERS_ID = "burnie-senders";
 
 export const PSYOP_SERVER = "http://165.232.83.159/psyopanime";
 
@@ -67,6 +68,14 @@ export const PSYOP_SEARCH_RESULT: AnimeResult = {
     score: 9.9,
 };
 
+export const BURNIE_SENDERS_SEARCH_RESULT: AnimeResult = {
+    id: BURNIE_SENDERS_ID,
+    title: "Burnie Senders",
+    image: "/burnie-senders-poster.png",
+    type: "Coming Soon",
+    score: null,
+};
+
 export const PSYOP_INFO: AnimeInfo = {
     id: PSYOP_ID,
     title: "PsyopAnime: The Series",
@@ -87,6 +96,20 @@ export const PSYOP_INFO: AnimeInfo = {
     genres: ["Sci-Fi Action", "Psychological Thriller", "Satire"],
     score: 9.9,
     episodes: PSYOP_EPISODES,
+};
+
+export const BURNIE_SENDERS_INFO: AnimeInfo = {
+    id: BURNIE_SENDERS_ID,
+    title: "Burnie Senders",
+    image: "/burnie-senders-poster.png",
+    cover: "/burnie-senders-poster.png",
+    description:
+        "A new Sakura original is transmitting soon. The Burnie Senders are assembling for a meme-fueled anime drop from the edge of the chain.",
+    status: "Coming Soon",
+    genres: ["Sakura Original", "Meme Action", "Coming Soon"],
+    score: null,
+    episodes: [],
+    episodeLoadError: "Burnie Senders is coming soon",
 };
 
 export const PSYOP_STUDIO = "xAI Visions (in collaboration with meme overlords)";
@@ -119,6 +142,17 @@ export function matchesPsyopQuery(query: string): boolean {
         q.includes("neo-meme") ||
         q.includes("psyopanime") ||
         q === "sakura original"
+    );
+}
+
+export function matchesBurnieSendersQuery(query: string): boolean {
+    const q = query.toLowerCase().trim();
+    return (
+        q.includes("burnie") ||
+        q.includes("bernie") ||
+        q.includes("sender") ||
+        q.includes("senders") ||
+        q.includes("sakura original")
     );
 }
 

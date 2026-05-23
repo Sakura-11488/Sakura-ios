@@ -16,7 +16,18 @@ import {
     getLastConsumetError,
     getLastConsumetErrorDetails,
 } from "./sources/gogoanime";
-import { PSYOP_SEARCH_RESULT, PSYOP_INFO, PSYOP_ID, matchesPsyopQuery, isPsyopEpisode, getPsyopStreamUrl } from "./psyopAnime";
+import {
+    BURNIE_SENDERS_ID,
+    BURNIE_SENDERS_INFO,
+    BURNIE_SENDERS_SEARCH_RESULT,
+    PSYOP_SEARCH_RESULT,
+    PSYOP_INFO,
+    PSYOP_ID,
+    matchesBurnieSendersQuery,
+    matchesPsyopQuery,
+    isPsyopEpisode,
+    getPsyopStreamUrl,
+} from "./psyopAnime";
 
 export interface AnimeResult {
     id: string;
@@ -895,6 +906,11 @@ async function loadAnimeInfo(id: string, options: AnimeInfoRefreshOptions = {}):
         return PSYOP_INFO;
     }
 
+    if (id === BURNIE_SENDERS_ID) {
+        _lastDiag = "[burnie-senders] coming soon";
+        return BURNIE_SENDERS_INFO;
+    }
+
     const cacheKey = `info_${id}`;
     if (!options.forceSourceRefresh) {
         const cached = cacheGet<AnimeInfo>(cacheKey);
@@ -990,6 +1006,10 @@ export async function searchAnime(query: string): Promise<AnimeResult[]> {
 
     if (matchesPsyopQuery(query)) {
         mapped.unshift(PSYOP_SEARCH_RESULT);
+    }
+
+    if (matchesBurnieSendersQuery(query)) {
+        mapped.unshift(BURNIE_SENDERS_SEARCH_RESULT);
     }
 
     if (mapped.length > 0) cacheSet(cacheKey, mapped, TTL_SEARCH);
