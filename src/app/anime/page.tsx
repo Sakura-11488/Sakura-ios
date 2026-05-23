@@ -6,7 +6,6 @@ import AnimeCard from "@/components/AnimeCard";
 import { searchAnime, fetchAiringAnime, fetchPopularAnime, fetchAnimeByGenre, ANIME_GENRES, type AnimeResult } from "@/lib/anime";
 import { getLastAniListDebug } from "@/lib/anilist";
 import { getLocal, setLocal, setLocalAndSyncSearches, STORAGE_KEYS, getAnimeHistory, type AnimeHistoryEntry } from "@/lib/storage";
-import { PSYOP_ID, PSYOP_INFO, PSYOP_EPISODES } from "@/lib/psyopAnime";
 import Link from "next/link";
 
 function useDebounce(value: string, delay: number) {
@@ -155,7 +154,14 @@ export default function AnimeBrowsePage() {
     }, []);
 
     const isSearching = search.trim().length > 0;
-    const firstEp = PSYOP_EPISODES[0];
+    const burnieSenders = {
+        id: "burnie-senders",
+        title: "Burnie Senders",
+        poster: "/burnie-senders-poster.png",
+        description:
+            "A new Sakura original is transmitting soon. The Burnie Senders are assembling for a meme-fueled anime drop from the edge of the chain.",
+        genres: ["Sakura Original", "Meme Action", "Coming Soon"],
+    };
 
     return (
         <>
@@ -167,27 +173,24 @@ export default function AnimeBrowsePage() {
                     <div className="anime-hero">
                         <div className="anime-hero-bg">
                             {/* eslint-disable-next-line @next/next/no-img-element */}
-                            <img src="/psyopanime.png" alt="" />
+                            <img src={burnieSenders.poster} alt="" />
                         </div>
                         <div className="anime-hero-content">
-                            <span className="anime-hero-badge">PsyopAnime × Sakura</span>
-                            <h1 className="anime-hero-title">{PSYOP_INFO.title}</h1>
+                            <span className="anime-hero-badge">Sakura Original × Burnie</span>
+                            <h1 className="anime-hero-title">{burnieSenders.title}</h1>
                             <div className="anime-hero-meta">
-                                <span style={{ color: "#4ade80", fontWeight: 700 }}>Ongoing</span>
+                                <span style={{ color: "var(--sakura-pink)", fontWeight: 700 }}>Coming Soon</span>
                                 <span>·</span>
-                                {PSYOP_INFO.genres?.map(g => <span key={g}>{g}</span>)}
+                                {burnieSenders.genres.map(g => <span key={g}>{g}</span>)}
                             </div>
-                            <p className="anime-hero-desc">{PSYOP_INFO.description}</p>
+                            <p className="anime-hero-desc">{burnieSenders.description}</p>
                             <div className="anime-hero-actions">
                                 <Link
-                                    href={`/anime/watch?id=${PSYOP_ID}&ep=${encodeURIComponent(firstEp.id)}`}
+                                    href={`/anime/details?id=${encodeURIComponent(burnieSenders.id)}`}
                                     className="anime-hero-play"
+                                    style={{ opacity: 0.86 }}
                                 >
-                                    <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3" /></svg>
-                                    Start Watching
-                                </Link>
-                                <Link href={`/anime/details?id=${PSYOP_ID}`} className="anime-hero-save" aria-label="Details">
-                                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="9 18 15 12 9 6" /></svg>
+                                    View Coming Soon
                                 </Link>
                             </div>
                         </div>
