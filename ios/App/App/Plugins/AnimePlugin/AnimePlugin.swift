@@ -54,6 +54,29 @@ public class AnimePlugin: CAPPlugin, CAPBridgedPlugin {
         let title = call.getString("title") ?? "Episode"
         let hasNext = call.getBool("hasNext") ?? false
         let nextEpisodeTitle = call.getString("nextEpisodeTitle") ?? ""
+        let introStart = call.getDouble("introStart")
+        let introEnd = call.getDouble("introEnd")
+        let streamUrl = call.getString("streamUrl") ?? ""
+        let referer = call.getString("referer")
+
+        if !streamUrl.isEmpty {
+            DispatchQueue.main.async { [weak self] in
+                self?.presentPlayer(
+                    streamUrl: streamUrl,
+                    referer: referer,
+                    title: title,
+                    subtitles: [],
+                    episodeId: episodeId,
+                    hasNext: hasNext,
+                    nextEpisodeTitle: nextEpisodeTitle,
+                    introStart: introStart,
+                    introEnd: introEnd,
+                    isLocal: false,
+                    call: call
+                )
+            }
+            return
+        }
 
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
             guard let self = self else { return }
@@ -106,6 +129,8 @@ public class AnimePlugin: CAPPlugin, CAPBridgedPlugin {
                         episodeId: episodeId,
                         hasNext: hasNext,
                         nextEpisodeTitle: nextEpisodeTitle,
+                        introStart: introStart,
+                        introEnd: introEnd,
                         isLocal: false,
                         call: call
                     )
@@ -129,6 +154,8 @@ public class AnimePlugin: CAPPlugin, CAPBridgedPlugin {
         let episodeId = call.getString("episodeId") ?? ""
         let hasNext = call.getBool("hasNext") ?? false
         let nextEpisodeTitle = call.getString("nextEpisodeTitle") ?? ""
+        let introStart = call.getDouble("introStart")
+        let introEnd = call.getDouble("introEnd")
 
         DispatchQueue.main.async { [weak self] in
             self?.presentPlayer(
@@ -139,6 +166,8 @@ public class AnimePlugin: CAPPlugin, CAPBridgedPlugin {
                 episodeId: episodeId,
                 hasNext: hasNext,
                 nextEpisodeTitle: nextEpisodeTitle,
+                introStart: introStart,
+                introEnd: introEnd,
                 isLocal: true,
                 call: call
             )
@@ -370,7 +399,7 @@ public class AnimePlugin: CAPPlugin, CAPBridgedPlugin {
             return
         }
         requestDownloadCancel(episodeId: episodeId)
-        call.resolve(["success": true])
+        call.resolve(["cancelled": true])
     }
 
     // MARK: - clearCache
@@ -390,6 +419,8 @@ public class AnimePlugin: CAPPlugin, CAPBridgedPlugin {
         episodeId: String,
         hasNext: Bool,
         nextEpisodeTitle: String,
+        introStart: Double?,
+        introEnd: Double?,
         isLocal: Bool,
         call: CAPPluginCall
     ) {
@@ -406,6 +437,8 @@ public class AnimePlugin: CAPPlugin, CAPBridgedPlugin {
         playerVC.episodeId = episodeId
         playerVC.hasNext = hasNext
         playerVC.nextEpisodeTitle = nextEpisodeTitle
+        playerVC.introStart = introStart
+        playerVC.introEnd = introEnd
         playerVC.isLocal = isLocal
         playerVC.modalPresentationStyle = .fullScreen
 

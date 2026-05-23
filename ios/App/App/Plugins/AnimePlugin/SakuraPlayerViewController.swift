@@ -13,6 +13,8 @@ class SakuraPlayerViewController: UIViewController {
     var episodeId: String = ""
     var hasNext: Bool = false
     var nextEpisodeTitle: String = ""
+    var introStart: Double?
+    var introEnd: Double?
     var isLocal: Bool = false
     var onDismiss: ((Bool) -> Void)?
 
@@ -31,6 +33,7 @@ class SakuraPlayerViewController: UIViewController {
     private var upNextShown = false
     private var countdownValue = 5
     private var countdownTimer: Timer?
+    private var skipIntroButton: UIButton?
 
     private static let prefsKey = "sakura_player_positions"
     private static let upNextThreshold: TimeInterval = 60
@@ -48,6 +51,7 @@ class SakuraPlayerViewController: UIViewController {
 
         setupPlayer()
         setupUpNextOverlay()
+        setupSkipIntroOverlay()
     }
 
     override func viewWillDisappear(_ animated: Bool) {
@@ -224,6 +228,8 @@ class SakuraPlayerViewController: UIViewController {
                 showUpNext()
             }
         }
+
+        updateSkipIntroVisibility(currentSec: currentSec)
     }
 
     // MARK: - Position Persistence
@@ -259,6 +265,69 @@ class SakuraPlayerViewController: UIViewController {
         var positions = getPositions()
         positions.removeValue(forKey: "anime_pos_\(episodeId)")
         UserDefaults.standard.set(positions, forKey: Self.prefsKey)
+    }
+
+    // MARK: - Skip Intro Overlay
+
+    private func hasValidIntroWindow() -> Bool {
+        guard let start = introStart, let end = introEnd else { return false }
+        return end > start && start >= 0
+    }
+
+    private func setupSkipIntroOverlay() {
+        guard hasValidIntroWindow() else { return }
+
+        let button = UIButton(type: .system)
+        button.setTitle("Skip Intro", for: .normal)
+        button.setTitleColor(.white, for: .normal)
+        button.titleLabel?.font = .systemFont(ofSize: 15, weight: .bold)
+        button.backgroundColor = UIColor(red: 233/255, green: 30/255, blue: 123/255, alpha: 0.92)
+        button.layer.cornerRadius = 14
+        button.layer.shadowColor = UIColor.black.cgColor
+        button.layer.shadowOpacity = 0.28
+        button.layer.shadowOffset = CGSize(width: 0, height: 4)
+        button.layer.shadowRadius = 10
+        button.contentEdgeInsets = UIEdgeInsets(top: 10, left: 16, bottom: 10, right: 16)
+        button.isHidden = true
+        button.alpha = 0
+        button.translatesAutoresizingMaskIntoConstraints = false
+        button.addTarget(self, action: #selector(skipIntroTapped), for: .touchUpInside)
+
+        view.addSubview(button)
+        NSLayoutConstraint.activate([
+            button.trailingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.trailingAnchor, constant: -24),
+            button.bottomAnchor.constraint(equalTo: view.safeAreaLayoutGuide.bottomAnchor, constant: -24),
+        ])
+        skipIntroButton = button
+    }
+
+    private func updateSkipIntroVisibility(currentSec: TimeInterval) {
+        guard hasValidIntroWindow(),
+              let start = introStart,
+              let end = introEnd,
+              let button = skipIntroButton else { return }
+
+        let shouldShow = currentSec >= start && currentSec < end
+        if shouldShow && button.isHidden {
+            button.isHidden = false
+            UIView.animate(withDuration: 0.2) {
+                button.alpha = 1
+            }
+        } else if !shouldShow && !button.isHidden {
+            UIView.animate(withDuration: 0.2, animations: {
+                button.alpha = 0
+            }, completion: { _ in
+                button.isHidden = true
+            })
+        }
+    }
+
+    @objc private func skipIntroTapped() {
+        guard let end = introEnd else { return }
+        let time = CMTime(seconds: end, preferredTimescale: 600)
+        player?.seek(to: time, toleranceBefore: .zero, toleranceAfter: .zero)
+        skipIntroButton?.isHidden = true
+        skipIntroButton?.alpha = 0
     }
 
     // MARK: - Up Next Overlay

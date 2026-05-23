@@ -22,6 +22,9 @@ import FloatingTradeWidget from "@/components/FloatingTradeWidget";
 import CloudSyncProvider from "@/components/CloudSyncProvider";
 import TermsGate from "@/components/TermsGate";
 import HttpImageShim from "@/components/HttpImageShim";
+import ComradeModeTransition from "@/components/ComradeModeTransition";
+import AppUpdatePrompt from "@/components/AppUpdatePrompt";
+import { I18nProvider } from "@/lib/i18n/I18nProvider";
 
 export default function RootLayout({
   children,
@@ -64,13 +67,17 @@ export default function RootLayout({
 
         <HttpImageShim />
         <SolanaProvider>
-          <TermsGate>
-            <CloudSyncProvider />
-            <MobileNavHandler />
-            {children}
-            <FloatingTradeWidget />
-            <BottomNav />
-          </TermsGate>
+          <I18nProvider>
+            <ComradeModeTransition />
+            <TermsGate>
+              <CloudSyncProvider />
+              <MobileNavHandler />
+              <AppUpdatePrompt />
+              {children}
+              <FloatingTradeWidget />
+              <BottomNav />
+            </TermsGate>
+          </I18nProvider>
         </SolanaProvider>
       </body>
     </html>

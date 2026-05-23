@@ -1,6 +1,7 @@
 import { fetchJikanSearch, fetchJikanTrending, fetchJikanPopular, fetchJikanInfo, fetchJikanByGenre, ANIME_GENRES, type JikanAnime } from "./jikan";
 export { ANIME_GENRES } from "./jikan";
 import { alTrending, alPopular, alSearch, alByGenre, type SimpleAnime } from "./anilist";
+import { Capacitor } from "@capacitor/core";
 
 function simpleToResult(a: SimpleAnime): AnimeResult {
     return { id: String(a.mal_id), title: a.title, image: a.image, type: a.type, score: a.score, year: a.year };
@@ -484,6 +485,11 @@ function getSuspiciousMatchReason(jikanData: JikanAnime, candidateTitle: string,
     }
 
     const normalizedType = normalizeTitle(jikanData.type);
+    const normalizedCandidate = normalizeTitle(candidateTitle);
+    const canonicalTitles = getSourceTitleVariants(jikanData).map(normalizeTitle).filter(Boolean);
+    const candidateLooksLikeSideStory =
+        /[:]/.test(candidateTitle) &&
+        /\b(movie|special|ova|ona|recap|log|memoirs|adventure|film)\b/i.test(candidateTitle);
     const expectedEpisodes = jikanData.episodes || 0;
     const titleSignals = extractTitleSignals(candidateTitle);
     // Currently airing shows haven't aired all episodes yet; if HiAnime
@@ -493,6 +499,13 @@ function getSuspiciousMatchReason(jikanData: JikanAnime, candidateTitle: string,
 
     if (normalizedType !== "movie" && titleSignals.movie) {
         return "tv series matched a movie listing";
+    }
+
+    if (normalizedType === "tv" && candidateLooksLikeSideStory) {
+        const exactBaseTitle = canonicalTitles.some(title => title === normalizedCandidate.split(/\s+(?:movie|special|ova|ona|recap|log|film)\b/i)[0]?.trim());
+        if (!exactBaseTitle) {
+            return "tv series matched a side-story listing";
+        }
     }
 
     if (normalizedType === "tv" && expectedEpisodes > 6 && (titleSignals.special || titleSignals.ova || titleSignals.ona)) {
@@ -731,6 +744,121 @@ async function resolveSourceMatch(
     return null;
 }
 
+async function searchNativeAnimeSource(query: string): Promise<{ id: string; title: string }[]> {
+    if (!Capacitor.isNativePlatform()) return [];
+    try {
+        const { Anime } = await import("@/plugins/anime");
+        const result = await Anime.searchHiAnime({ query });
+        const parsed = JSON.parse(result.results) as { id?: string; title?: string }[];
+        return Array.isArray(parsed)
+            ? parsed
+                .map(item => ({ id: String(item.id || ""), title: String(item.title || "") }))
+                .filter(item => item.id && item.title)
+            : [];
+    } catch (error) {
+        _lastDiag += ` -> native search failed(${query}: ${(error as Error)?.message || "unknown"})`;
+        return [];
+    }
+}
+
+async function loadNativeEpisodesForAnimeId(animeId: string): Promise<AnimeInfo["episodes"]> {
+    if (!Capacitor.isNativePlatform()) return [];
+    try {
+        const { Anime } = await import("@/plugins/anime");
+        const result = await Anime.getEpisodes({ animeId });
+        const parsed = JSON.parse(result.episodes) as { id?: string; number?: number; title?: string }[];
+        return Array.isArray(parsed)
+            ? parsed
+                .map(item => ({
+                    id: String(item.id || ""),
+                    number: Number(item.number || 0),
+                    title: String(item.title || `Episode ${item.number || "?"}`),
+                }))
+                .filter(episode => episode.id && episode.number > 0)
+            : [];
+    } catch (error) {
+        _lastDiag += ` -> native episodes failed(${animeId}: ${(error as Error)?.message || "unknown"})`;
+        return [];
+    }
+}
+
+async function resolveNativeSourceMatch(
+    jikanData: JikanAnime,
+    options: { rejectedSlugs?: Set<string> } = {},
+): Promise<ResolvedSourceMatch | null> {
+    if (!Capacitor.isNativePlatform()) return null;
+
+    const malId = String(jikanData.mal_id);
+    const mapKey = `srcmap_v4_${malId}`;
+    const rejectedSlugs = options.rejectedSlugs || new Set<string>();
+    const queries = buildSourceQueries(jikanData);
+    const seenQueries = new Set<string>();
+    const candidates = new Map<string, SourceCandidate>();
+
+    for (let queryIndex = 0; queryIndex < queries.length; queryIndex += 1) {
+        const query = queries[queryIndex];
+        const queryKey = normalizeTitle(query);
+        if (!queryKey || seenQueries.has(queryKey)) continue;
+        seenQueries.add(queryKey);
+
+        const results = await searchNativeAnimeSource(query);
+        for (const result of results) {
+            const slug = result.id;
+            if (!slug || rejectedSlugs.has(slug)) continue;
+            const score = scoreCandidate(jikanData, result.title, queryIndex);
+            const existing = candidates.get(slug);
+            if (!existing || score > existing.score) {
+                candidates.set(slug, {
+                    slug,
+                    animeId: slug,
+                    title: result.title,
+                    query,
+                    queryIndex,
+                    score,
+                });
+            }
+        }
+
+        if (candidates.size >= 12) break;
+    }
+
+    const ranked = [...candidates.values()]
+        .filter(candidate => candidate.score >= MIN_CANDIDATE_SCORE)
+        .sort((left, right) => right.score - left.score)
+        .slice(0, MAX_RANKED_CANDIDATES);
+
+    if (ranked.length === 0) {
+        _lastDiag += " -> native fallback found no ranked candidates";
+        return null;
+    }
+
+    const rejectedReasons: string[] = [];
+    for (const candidate of ranked) {
+        const episodes = await loadNativeEpisodesForAnimeId(candidate.slug);
+        const suspiciousReason = getSuspiciousMatchReason(jikanData, candidate.title, episodes.length);
+        if (suspiciousReason) {
+            rejectedReasons.push(`${candidate.slug}: ${suspiciousReason}`);
+            continue;
+        }
+
+        const resolved: ResolvedSourceMatch = {
+            slug: candidate.slug,
+            animeId: candidate.slug,
+            matchedTitle: candidate.title,
+            score: candidate.score,
+            query: candidate.query,
+            cacheHit: false,
+            episodes,
+        };
+
+        _lastDiag += ` -> native src(${resolved.slug}, score=${resolved.score}, eps=${episodes.length})`;
+        return resolved;
+    }
+
+    _lastDiag += ` -> native rejected ${ranked.length} candidate(s): ${rejectedReasons.join(" | ")}`;
+    return null;
+}
+
 function buildAnimeInfo(jikanData: JikanAnime, episodes: AnimeInfo["episodes"]): AnimeInfo {
     return {
         id: String(jikanData.mal_id),
@@ -789,6 +917,9 @@ async function loadAnimeInfo(id: string, options: AnimeInfoRefreshOptions = {}):
     if (!sourceMatch) {
         sourceMatch = await resolveSourceMatch(jikanData, { forceRefresh: options.forceSourceRefresh });
     }
+    if (!sourceMatch) {
+        sourceMatch = await resolveNativeSourceMatch(jikanData);
+    }
     let episodes: AnimeInfo["episodes"] = [];
 
     if (sourceMatch?.animeId) {
@@ -800,6 +931,9 @@ async function loadAnimeInfo(id: string, options: AnimeInfoRefreshOptions = {}):
             clearAnimeInfoCache(id, sourceMatch.animeId);
             const rejected = new Set<string>([sourceMatch.slug]);
             sourceMatch = await resolveSourceMatch(jikanData, { forceRefresh: true, rejectedSlugs: rejected });
+            if (!sourceMatch) {
+                sourceMatch = await resolveNativeSourceMatch(jikanData, { rejectedSlugs: rejected });
+            }
             episodes = sourceMatch?.episodes || (sourceMatch?.animeId ? await loadEpisodesForAnimeId(sourceMatch.animeId) : []);
         }
     } else {
@@ -1000,6 +1134,8 @@ export async function fetchEpisodeSources(
             isM3U8: source.isM3U8,
             referer: result.referer,
             tracks: result.subtitles.map((subtitle) => ({ file: subtitle.file, label: subtitle.label })),
+            intro: result.intro || undefined,
+            outro: result.outro || undefined,
             category: result.category,
             availableCategories: result.availableCategories,
         };

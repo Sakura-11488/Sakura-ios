@@ -72,8 +72,8 @@ function AnimeWatchInner() {
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<WatchErrorState | null>(null);
     const [nativePlaying, setNativePlaying] = useState(false);
-    /** ExoPlayer / Anime plugin streaming is Android-only; iOS and web use iframe playback. */
-    const [useAndroidExoPlayer] = useState(Capacitor.getPlatform() === "android");
+    /** Native anime playback is available through platform plugins on iOS and Android. */
+    const [useNativePlayer] = useState(Capacitor.isNativePlatform());
     const [playTriggered, setPlayTriggered] = useState(false);
     const [category, setCategory] = useState<"sub" | "dub">(getSavedCategory);
     const [availableCategories, setAvailableCategories] = useState<string[]>(["sub"]);
@@ -139,21 +139,27 @@ function AnimeWatchInner() {
                     }
                 }
 
-                console.log(`[Watch] Fetching sources for ep=${episodeId} category=${category}`);
-                const sourceData = await fetchEpisodeSources(episodeId, category);
-                if (cancelled) return;
-
-                if (sourceData) {
-                    console.log(`[Watch] Got source URL: ${sourceData.url?.substring(0, 80)}`);
-                    setSource(sourceData);
-                    if (sourceData.availableCategories) setAvailableCategories(sourceData.availableCategories);
-                    applyResolvedCategory(sourceData.category);
+                if (useNativePlayer && !isPsyopEpisode(episodeId) && !episodeId.startsWith("hi-")) {
+                    // Native iOS fallback episodes are real HiAnime episode ids;
+                    // the native plugin resolves their servers directly.
+                    setSource(null);
                 } else {
-                    setError({
-                        message: "Could not find a stream for this episode. Try another episode or check back later.",
-                        code: "NO_STREAM_SOURCES",
-                        stage: "extractor",
-                    });
+                    console.log(`[Watch] Fetching sources for ep=${episodeId} category=${category}`);
+                    const sourceData = await fetchEpisodeSources(episodeId, category);
+                    if (cancelled) return;
+
+                    if (sourceData) {
+                        console.log(`[Watch] Got source URL: ${sourceData.url?.substring(0, 80)}`);
+                        setSource(sourceData);
+                        if (sourceData.availableCategories) setAvailableCategories(sourceData.availableCategories);
+                        applyResolvedCategory(sourceData.category);
+                    } else {
+                        setError({
+                            message: "Could not find a stream for this episode. Try another episode or check back later.",
+                            code: "NO_STREAM_SOURCES",
+                            stage: "extractor",
+                        });
+                    }
                 }
             } catch (loadError) {
                 console.error("[Watch] Load error:", loadError);
@@ -170,7 +176,7 @@ function AnimeWatchInner() {
         return () => {
             cancelled = true;
         };
-    }, [id, episodeId, category, reloadToken, applyResolvedCategory]);
+    }, [id, episodeId, category, reloadToken, applyResolvedCategory, useNativePlayer]);
 
     const retryStream = useCallback(() => {
         setPlayTriggered(false);
@@ -283,7 +289,7 @@ function AnimeWatchInner() {
                     nextEpisodeTitle: nextEp?.title || (nextEp ? `Episode ${nextEp.number}` : ""),
                 });
             } else {
-                if (!source?.url) {
+                if (!source?.url && episodeId.startsWith("hi-")) {
                     setError({
                         message: "No stream URL is available yet. Retry the stream first.",
                         code: "NO_STREAM_URL",
@@ -293,13 +299,12 @@ function AnimeWatchInner() {
                 }
 
                 result = await Anime.playEpisode({
-                    streamUrl: source.url,
-                    referer: source.referer || "",
+                    ...(source?.url ? { streamUrl: source.url, referer: source.referer || "" } : {}),
                     title,
                     episodeId,
                     hasNext: !!nextEp,
                     nextEpisodeTitle: nextEp?.title || (nextEp ? `Episode ${nextEp.number}` : ""),
-                    ...(source.intro != null
+                    ...(source?.intro != null
                     && typeof source.intro.start === "number"
                     && typeof source.intro.end === "number"
                     && source.intro.end > source.intro.start
@@ -334,18 +339,18 @@ function AnimeWatchInner() {
     }, [anime, episodeId, id, router, source]);
 
     useEffect(() => {
-        if (useAndroidExoPlayer && anime && source && !error && !nativePlaying && !playTriggered) {
+        if (useNativePlayer && anime && !error && !nativePlaying && !playTriggered) {
             setPlayTriggered(true);
             playNative();
         }
-    }, [useAndroidExoPlayer, anime, source, error, nativePlaying, playTriggered, playNative]);
+    }, [useNativePlayer, anime, source, error, nativePlaying, playTriggered, playNative]);
 
     // Suppress duplicate Space-bar pause/play on web. The embedded iframe
     // player already handles Space; if focus passes to the parent document,
     // the page would also fire its own scroll/play handler, so we swallow
     // the keystroke and forward it to the iframe.
     useEffect(() => {
-        if (useAndroidExoPlayer) return;
+        if (useNativePlayer) return;
         if (typeof window === "undefined") return;
         const onKeyDown = (e: KeyboardEvent) => {
             if (e.code !== "Space" && e.key !== " ") return;
@@ -360,13 +365,13 @@ function AnimeWatchInner() {
         };
         window.addEventListener("keydown", onKeyDown, { capture: true });
         return () => window.removeEventListener("keydown", onKeyDown, { capture: true } as any);
-    }, [useAndroidExoPlayer]);
+    }, [useNativePlayer]);
 
     if (loading) {
         return (
             <main className="cinema-page" style={{ height: "100vh", display: "flex", alignItems: "center", justifyContent: "center", background: "#000" }}>
                 <div className="spinner" style={{ color: "var(--sakura-pink)" }}>
-                    {useAndroidExoPlayer ? "🌸 Preparing Native Player..." : "🌸 Locating Stream..."}
+                    {useNativePlayer ? "🌸 Preparing Native Player..." : "🌸 Locating Stream..."}
                 </div>
             </main>
         );
@@ -413,7 +418,7 @@ function AnimeWatchInner() {
                             {rematching ? "Rematching..." : "Rematch Series"}
                         </button>
                     )}
-                    {useAndroidExoPlayer && source?.url && (
+                    {useNativePlayer && source?.url && (
                         <button onClick={playNative} className="btn-secondary" style={{ padding: "12px 24px" }}>
                             Retry Native Player
                         </button>
@@ -517,14 +522,14 @@ function AnimeWatchInner() {
                 paddingTop: "60px",
                 paddingBottom: "10px",
             }}>
-                {useAndroidExoPlayer ? (
+                {useNativePlayer ? (
                     <div style={{ textAlign: "center", padding: "2rem" }}>
                         <div style={{ fontSize: "48px", marginBottom: "1rem" }}>🍿</div>
                         <h2 style={{ color: "white", marginBottom: "1rem" }}>
                             {nativePlaying ? "Launching Player..." : "Native Player Ready"}
                         </h2>
                         <p style={{ color: "var(--text-muted)", marginBottom: "2rem", maxWidth: "300px" }}>
-                            Sakura uses a native Android video engine for the fastest ad-free playback.
+                            Sakura uses a native video engine for the fastest ad-free playback.
                         </p>
                         <button
                             onClick={playNative}

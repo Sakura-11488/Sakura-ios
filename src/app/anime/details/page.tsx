@@ -40,7 +40,7 @@ function AnimeDetailsInner() {
     const searchParams = useSearchParams();
     const router = useRouter();
     const id = searchParams.get("id") || "";
-    const isAndroidNative = Capacitor.getPlatform() === "android";
+    const isNative = Capacitor.isNativePlatform();
     const isPsyop = id === PSYOP_ID;
 
     const [anime, setAnime] = useState<AnimeInfo | null>(isPsyop ? PSYOP_INFO : null);
@@ -82,7 +82,7 @@ function AnimeDetailsInner() {
     }, [id]);
 
     useEffect(() => {
-        if (!isAndroidNative) return;
+        if (!isNative) return;
         let handle: { remove: () => void } | null = null;
         (async () => {
             const { Anime } = await import("@/plugins/anime");
@@ -103,7 +103,7 @@ function AnimeDetailsInner() {
             listenerRef.current = handle;
         })();
         return () => { handle?.remove(); };
-    }, [isAndroidNative, showToast]);
+    }, [isNative, showToast]);
 
     const handleCancelDownload = useCallback(async (episodeId: string) => {
         try {
@@ -144,15 +144,18 @@ function AnimeDetailsInner() {
         });
 
         try {
-            const sourceData = await fetchEpisodeSources(ep.id);
-            if (!sourceData?.url) throw new Error("Could not resolve stream URL for download.");
+            const sourceData = isNative && !ep.id.startsWith("hi-")
+                ? null
+                : await fetchEpisodeSources(ep.id);
+            if (!sourceData?.url && ep.id.startsWith("hi-")) throw new Error("Could not resolve stream URL for download.");
             const { Anime } = await import("@/plugins/anime");
             showToast(`Download started: ${ep.title || `Episode ${ep.number}`}`);
             const result = await Anime.downloadEpisode({
-                episodeId: ep.id, m3u8Url: sourceData.url,
+                episodeId: ep.id,
+                ...(sourceData?.url ? { m3u8Url: sourceData.url } : {}),
                 title: ep.title || `Episode ${ep.number}`, animeTitle: anime.title,
-                referer: sourceData.referer,
-                isM3U8: sourceData.isM3U8,
+                referer: sourceData?.referer,
+                isM3U8: sourceData?.isM3U8,
             });
             if (result.filePath) {
                 setDlMap(prev => {
@@ -174,7 +177,7 @@ function AnimeDetailsInner() {
             });
             showToast(`${cancelled ? "Download cancelled" : "Download failed"}: ${ep.title || `Episode ${ep.number}`}`);
         }
-    }, [anime, id, dlMap, showToast]);
+    }, [anime, id, dlMap, isNative, showToast]);
 
     useEffect(() => {
         if (!id || isPsyop) return;
@@ -411,7 +414,7 @@ function AnimeDetailsInner() {
 
                                         {/* Actions */}
                                         <div className="anime-episode-actions">
-                                            {isAndroidNative && (
+                                            {isNative && (
                                                 <>
                                                     {isCompleted ? (
                                                         <button className="anime-episode-dl" title="Downloaded" onClick={(e) => { e.preventDefault(); handleDownload(ep); }}>

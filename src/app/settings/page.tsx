@@ -12,12 +12,15 @@ import { searchCreators, type CreatorProfile } from "@/lib/creator";
 import Link from "next/link";
 import LottieIcon from "@/components/LottieIcon";
 import { schedulePushSettings } from "@/lib/cloud-sync";
+import { SUPPORTED_LOCALES, useI18n, type Locale } from "@/lib/i18n/I18nProvider";
+import { SettingsUpdateActions } from "@/components/AppUpdatePrompt";
 
 type ReadingMode = 'scroll' | 'page';
 
 export default function SettingsPage() {
     const { publicKey, disconnect } = useWallet();
     const { setVisible } = useSakuraWalletModal();
+    const { locale, setLocale, t } = useI18n();
 
     const [dataSaver, setDataSaver] = useState(false);
     const [pnlTracker, setPnlTracker] = useState(false);
@@ -154,8 +157,49 @@ export default function SettingsPage() {
             <main className="main-content">
                 <section className="section" style={{ paddingTop: 40, maxWidth: 800, margin: "0 auto" }}>
                     <div className="section-header">
-                        <h2 className="section-title">Settings 設定</h2>
-                        <p className="section-subtitle">Manage preferences, wallet, and notifications</p>
+                        <h2 className="section-title">{t("settings.title")} 設定</h2>
+                        <p className="section-subtitle">{t("settings.subtitle")}</p>
+                    </div>
+
+                    <div className="settings-group">
+                        <h3 className="settings-group-title">{t("settings.languageGroup")}</h3>
+                        <div className="setting-item">
+                            <div className="setting-info">
+                                <span className="setting-name">{t("settings.languageName")}</span>
+                                <span className="setting-desc">{t("settings.languageDesc")}</span>
+                            </div>
+                            <select
+                                value={locale}
+                                onChange={(event) => setLocale(event.target.value as Locale)}
+                                aria-label={t("settings.languageName")}
+                                style={{
+                                    minWidth: 180,
+                                    padding: "10px 14px",
+                                    borderRadius: 12,
+                                    border: "1px solid var(--border-subtle)",
+                                    background: "var(--bg-card)",
+                                    color: "var(--text-primary)",
+                                    fontSize: 14,
+                                    outline: "none",
+                                }}
+                            >
+                                {SUPPORTED_LOCALES.map(language => (
+                                    <option key={language.code} value={language.code}>
+                                        {language.nativeName} - {language.name}
+                                    </option>
+                                ))}
+                            </select>
+                        </div>
+                        <p
+                            style={{
+                                margin: "-4px 0 0",
+                                color: locale === "comrade" ? "var(--sakura-pink)" : "var(--text-muted)",
+                                fontSize: 12,
+                                lineHeight: 1.5,
+                            }}
+                        >
+                            {t("settings.comradeHint")}
+                        </p>
                     </div>
 
                     {/* Wallet Management */}
@@ -638,6 +682,7 @@ export default function SettingsPage() {
                                 <span className="setting-desc">Sakura v1.2.1</span>
                             </div>
                         </div>
+                        <SettingsUpdateActions />
                         <div className="setting-item">
                             <div className="setting-info">
                                 <span className="setting-name">Contact</span>
