@@ -5,6 +5,9 @@ const API_BASE = (
 ).replace(/\/+$/, '');
 
 const HIANIME_BASE = "https://hianime.dk";
+const HIANIME_MIRRORS = [HIANIME_BASE, "https://hianime.to"];
+const HIANIME_UA =
+    "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1";
 
 export interface AnimeSourceErrorPayload {
     message: string;
@@ -110,6 +113,79 @@ export function isConfigured(): boolean {
     return !!API_BASE;
 }
 
+function parseAnimeIdFromHtml(html: string): string | null {
+    const match = html.match(/data-id="(\d+)"/);
+    return match?.[1] || null;
+}
+
+async function fetchWatchPageHtml(slug: string): Promise<string | null> {
+    for (const base of HIANIME_MIRRORS) {
+        const url = `${base}/watch/${slug}`;
+        try {
+            if (Capacitor.isNativePlatform()) {
+                const response = await CapacitorHttp.get({
+                    url,
+                    connectTimeout: 20000,
+                    readTimeout: 20000,
+                    headers: {
+                        "User-Agent": HIANIME_UA,
+                        Accept: "text/html,application/xhtml+xml",
+                    },
+                });
+                if (response.status >= 400) continue;
+                const html = typeof response.data === "string" ? response.data : "";
+                if (html && parseAnimeIdFromHtml(html)) return html;
+                continue;
+            }
+
+            const controller = new AbortController();
+            const timer = setTimeout(() => controller.abort(), 15000);
+            try {
+                const res = await fetch(url, {
+                    signal: controller.signal,
+                    headers: {
+                        "User-Agent": HIANIME_UA,
+                        Accept: "text/html,application/xhtml+xml",
+                    },
+                });
+                if (!res.ok) continue;
+                const html = await res.text();
+                if (html && parseAnimeIdFromHtml(html)) return html;
+            } finally {
+                clearTimeout(timer);
+            }
+        } catch {
+            // Try the next mirror.
+        }
+    }
+    return null;
+}
+
+async function resolveAnimeIdFromWatchPage(slug: string): Promise<string | null> {
+    const html = await fetchWatchPageHtml(slug);
+    if (!html) return null;
+    return parseAnimeIdFromHtml(html);
+}
+
+async function loadNativeEpisodesForSlug(slug: string): Promise<{ id: string; number: number; title: string }[]> {
+    if (!Capacitor.isNativePlatform()) return [];
+    try {
+        const { Anime } = await import("@/plugins/anime");
+        const result = await Anime.getEpisodes({ animeId: slug });
+        const parsed = JSON.parse(result.episodes) as { id?: string; number?: number; title?: string }[];
+        if (!Array.isArray(parsed)) return [];
+        return parsed
+            .map((item) => ({
+                id: String(item.id || ""),
+                number: Number(item.number || 0),
+                title: String(item.title || `Episode ${item.number || "?"}`),
+            }))
+            .filter((episode) => episode.id && episode.number > 0);
+    } catch {
+        return [];
+    }
+}
+
 let _lastError = '';
 let _lastErrorDetails: AnimeSourceErrorPayload | null = null;
 export function getLastConsumetError(): string { return _lastError; }
@@ -165,17 +241,29 @@ export async function getAnimeInfo(slug: string): Promise<{ animeId: string; nam
         _lastError = '';
         _lastErrorDetails = null;
         const data = await apiGet(`/api/info/${encodeURIComponent(slug)}`);
-        if (!data.animeId) return null;
-        if (data.animeId) {
-            _slugByAnimeId.set(data.animeId, slug);
+        let animeId = data.animeId || "";
+        if (!animeId) {
+            animeId = (await resolveAnimeIdFromWatchPage(slug)) || "";
         }
+        if (!animeId) return null;
+        _slugByAnimeId.set(animeId, slug);
         return {
-            animeId: data.animeId,
-            name: data.name || '',
-            description: data.description || '',
-            poster: data.poster || '',
+            animeId,
+            name: data.name || "",
+            description: data.description || "",
+            poster: data.poster || "",
         };
     } catch (error) {
+        const fallbackAnimeId = await resolveAnimeIdFromWatchPage(slug);
+        if (fallbackAnimeId) {
+            _slugByAnimeId.set(fallbackAnimeId, slug);
+            return {
+                animeId: fallbackAnimeId,
+                name: "",
+                description: "",
+                poster: "",
+            };
+        }
         const sourceError = toSourceError(error, {
             message: `Failed to resolve provider info for "${slug}"`,
             code: "INFO_FAILED",
@@ -211,6 +299,14 @@ export async function getAnimeSourceEpisodes(animeIdOrSlug: string): Promise<{ i
         if (!/^\d+$/.test(animeId)) {
             const info = await getAnimeInfo(animeId);
             if (!info?.animeId) {
+                const nativeEpisodes = await loadNativeEpisodesForSlug(animeId);
+                if (nativeEpisodes.length > 0) {
+                    return nativeEpisodes.map((episode) => ({
+                        id: episode.id,
+                        number: episode.number,
+                        title: episode.title,
+                    }));
+                }
                 console.warn(`[HiAnime] Could not resolve animeId for slug "${animeIdOrSlug}"`);
                 return [];
             }

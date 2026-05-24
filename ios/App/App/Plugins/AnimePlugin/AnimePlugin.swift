@@ -491,7 +491,7 @@ public class AnimePlugin: CAPPlugin, CAPBridgedPlugin {
 
         var request = URLRequest(url: apiURL, timeoutInterval: 10)
         request.setValue("Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1", forHTTPHeaderField: "User-Agent")
-        request.setValue("https://hianime.to/", forHTTPHeaderField: "Referer")
+        request.setValue("https://hianime.dk/", forHTTPHeaderField: "Referer")
         request.setValue("XMLHttpRequest", forHTTPHeaderField: "X-Requested-With")
         request.setValue("*/*", forHTTPHeaderField: "Accept")
 

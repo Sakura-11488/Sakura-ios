@@ -20,7 +20,7 @@ function getScriptUrl() { return `${MEGACLOUD_BASE}/js/player/a/prod/e1-player.m
 const FALLBACK_KEY_URL = 'https://raw.githubusercontent.com/itzzzme/megacloud-keys/main/key.txt';
 
 const HEADERS = {
-    'Referer': 'https://hianime.to/',
+    'Referer': 'https://hianime.dk/',
     'X-Requested-With': 'XMLHttpRequest',
     'Accept': '*/*',
 };

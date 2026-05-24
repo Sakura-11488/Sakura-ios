@@ -2,6 +2,7 @@ import { Chapter, Manga, MangaSource } from "./types";
 import { MANGA_SOURCE_IDS } from "./source-ids";
 import { buildSourceCacheKey } from "./source-scope";
 import { cacheWrap } from "../cache";
+import { Capacitor, CapacitorHttp } from "@capacitor/core";
 import { normalizeChaptersForReading } from "../chapter-order";
 
 const ATSUMARU_BASE_URL = "https://atsu.moe";
@@ -36,7 +37,57 @@ function absoluteImageUrl(path?: string | null): string {
     return `${ATSUMARU_STATIC_BASE}/${path.replace(/^\/+/, "").replace(/^static\//, "")}`;
 }
 
+function parseRequestBody(body?: BodyInit | null): unknown {
+    if (typeof body === "string") {
+        try {
+            return JSON.parse(body);
+        } catch {
+            return body;
+        }
+    }
+    return body;
+}
+
 async function requestJson<T>(url: string, init?: RequestInit): Promise<T> {
+    if (Capacitor.isNativePlatform()) {
+        const headers = {
+            Accept: "application/json",
+            Referer: ATSUMARU_BASE_URL,
+            ...(init?.headers as Record<string, string> | undefined),
+        };
+
+        if (init?.method && init.method.toUpperCase() !== "GET") {
+            const response = await CapacitorHttp.request({
+                url,
+                method: init.method.toUpperCase(),
+                headers: {
+                    ...headers,
+                    "Content-Type": "application/json",
+                },
+                data: parseRequestBody(init.body),
+                connectTimeout: 15000,
+                readTimeout: 20000,
+            });
+            if (response.status >= 400) {
+                throw new Error(`HTTP Error: ${response.status}`);
+            }
+            const payload = response.data;
+            return (typeof payload === "string" ? JSON.parse(payload) : payload) as T;
+        }
+
+        const response = await CapacitorHttp.get({
+            url,
+            headers,
+            connectTimeout: 15000,
+            readTimeout: 20000,
+        });
+        if (response.status >= 400) {
+            throw new Error(`HTTP Error: ${response.status}`);
+        }
+        const payload = response.data;
+        return (typeof payload === "string" ? JSON.parse(payload) : payload) as T;
+    }
+
     const response = await fetch(url, {
         ...init,
         headers: {
@@ -49,6 +100,42 @@ async function requestJson<T>(url: string, init?: RequestInit): Promise<T> {
         throw new Error(`HTTP Error: ${response.status}`);
     }
     return response.json() as Promise<T>;
+}
+
+function normalizeSearchQuery(query: string): string {
+    return query.trim().toLowerCase();
+}
+
+function titleMatchesQuery(title: string, query: string): boolean {
+    const normalizedQuery = normalizeSearchQuery(query);
+    if (!normalizedQuery) return true;
+    return normalizeSearchQuery(title).includes(normalizedQuery);
+}
+
+async function searchMangaFromCatalog(query: string, limit: number): Promise<Manga[]> {
+    const normalizedQuery = normalizeSearchQuery(query);
+    if (!normalizedQuery) {
+        return [];
+    }
+
+    const matches: Manga[] = [];
+    const seen = new Set<string>();
+
+    for (let page = 0; page < 8 && matches.length < limit; page += 1) {
+        const data = await requestJson<{ items?: AtsumaruListItem[] }>(
+            `${ATSUMARU_BASE_URL}/api/infinite/popular?page=${page}&types=${encodeURIComponent(ATSUMARU_TYPES)}`,
+        );
+
+        for (const item of data.items || []) {
+            if (!item?.id || !item.title || seen.has(item.id)) continue;
+            if (!titleMatchesQuery(item.title, normalizedQuery)) continue;
+            seen.add(item.id);
+            matches.push(mapListItemToManga(item));
+            if (matches.length >= limit) break;
+        }
+    }
+
+    return matches;
 }
 
 function mapListItemToManga(item: AtsumaruListItem): Manga {
@@ -105,8 +192,8 @@ export class AtsumaruSource implements MangaSource {
     id = MANGA_SOURCE_IDS.ATSUMARU;
     baseUrl = ATSUMARU_BASE_URL;
 
-    async searchManga(query: string, _limit = 20, _offset = 0): Promise<Manga[]> {
-        const cacheKey = buildSourceCacheKey(this.id, `search:${query}`);
+    async searchManga(query: string, limit = 20, _offset = 0): Promise<Manga[]> {
+        const cacheKey = buildSourceCacheKey(this.id, `search:v2:${query}:${limit}`);
         return cacheWrap(cacheKey, async () => {
             const payload = {
                 page: 0,
@@ -119,15 +206,24 @@ export class AtsumaruSource implements MangaSource {
                 },
             };
 
-            const data = await requestJson<any>(`${ATSUMARU_BASE_URL}/api/explore/filteredView`, {
-                method: "POST",
-                headers: {
-                    "Content-Type": "application/json",
-                },
-                body: JSON.stringify(payload),
-            });
+            try {
+                const data = await requestJson<any>(`${ATSUMARU_BASE_URL}/api/explore/filteredView`, {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/json",
+                    },
+                    body: JSON.stringify(payload),
+                });
 
-            return mapSearchResults(data);
+                const results = mapSearchResults(data);
+                if (results.length > 0) {
+                    return results.slice(0, limit);
+                }
+            } catch (error) {
+                console.warn("[Atsumaru] filteredView search failed, falling back to catalog scan:", (error as Error)?.message);
+            }
+
+            return searchMangaFromCatalog(query, limit);
         });
     }
 

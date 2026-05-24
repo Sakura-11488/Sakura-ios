@@ -20,6 +20,31 @@ import { getChapterScopedKey, parseScopedKey } from "@/lib/sources/source-scope"
 
 const COMIC_CACHE_VERSION_KEY = "sakura_comic_cache_version";
 const CURRENT_COMIC_CACHE_VERSION = "4";
+const MANGA_CACHE_VERSION_KEY = "sakura_manga_cache_version";
+const CURRENT_MANGA_CACHE_VERSION = "1";
+
+function chapterCacheLooksComplete(cachedPages: string[], expectedPages?: number): boolean {
+    if (!cachedPages.length) return false;
+    if (!expectedPages || expectedPages <= 0) return cachedPages.length >= 3;
+    if (expectedPages <= 3) return cachedPages.length >= expectedPages;
+    return cachedPages.length >= Math.max(3, Math.floor(expectedPages * 0.85));
+}
+
+/**
+ * Drop stale chapter caches that were saved before reader cache validation
+ * improvements, or when a source returned a truncated page list.
+ */
+function invalidateStaleChapterCache() {
+    if (typeof window === "undefined") return;
+    try {
+        const stored = localStorage.getItem(MANGA_CACHE_VERSION_KEY);
+        if (stored === CURRENT_MANGA_CACHE_VERSION) return;
+        setLocal(STORAGE_KEYS.CHAPTER_CACHE, {});
+        localStorage.setItem(MANGA_CACHE_VERSION_KEY, CURRENT_MANGA_CACHE_VERSION);
+    } catch (e) {
+        console.warn("manga cache migration failed", e);
+    }
+}
 
 /**
  * One-time migration: comic chapter URLs used to be raw xoxocomic.com CDN
@@ -545,20 +570,23 @@ function ReaderContent() {
                 setExternalUrl(null);
 
                 invalidateStaleComicChapterCache();
+                invalidateStaleChapterCache();
 
                 const cacheKey = getChapterScopedKey(chapterId, sourceStr);
                 const cache = getLocal<Record<string, string[]>>(STORAGE_KEYS.CHAPTER_CACHE, {});
-                const isCached = cache[cacheKey] && cache[cacheKey].length > 0;
+                const cachedPages = cache[cacheKey];
 
                 const source = getSource(sourceStr);
                 let requiresPass = false;
                 let manga: any = null;
 
                 let chapterList: Chapter[] = [];
+                let expectedPageCount = 0;
                 if (mangaId) {
                     try {
                         chapterList = await source.getChapters(mangaId, 500, 0);
                         const neighbors = getChapterNeighbors(chapterList, chapterId);
+                        expectedPageCount = neighbors.current?.pages || 0;
                         if (isMounted) {
                             setAllChapters(neighbors.ordered);
                             setCurrentChapterInfo(neighbors.current);
@@ -568,9 +596,9 @@ function ReaderContent() {
                     } catch (e) { console.warn("Failed to fetch chapter list", e); }
                 }
 
-                if (isCached) {
+                if (cachedPages?.length && chapterCacheLooksComplete(cachedPages, expectedPageCount)) {
                     if (isMounted) {
-                        setPages(cache[cacheKey]);
+                        setPages(cachedPages);
                         setHasAccess(true);
                         setLoading(false);
                     }
@@ -624,14 +652,19 @@ function ReaderContent() {
                 if (userHasPass) {
                     let urls: string[] = [];
                     const dlTask = downloadManager.getTask(chapterId);
-                    if (dlTask && dlTask.state === 'completed') {
+                    if (
+                        dlTask &&
+                        dlTask.state === "completed" &&
+                        dlTask.pages.length > 0 &&
+                        dlTask.downloadedPages === dlTask.pages.length
+                    ) {
                         for (let i = 0; i < dlTask.pages.length; i++) {
                             const localUrl = await downloadManager.getLocalPageUrl(mangaId!, chapterId!, i);
                             if (localUrl) urls.push(localUrl);
                         }
                     }
 
-                    if (urls.length === 0) {
+                    if (urls.length === 0 || (expectedPageCount > 0 && urls.length < expectedPageCount)) {
                         urls = await source.getChapterPages(chapterId);
                     }
 

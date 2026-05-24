@@ -127,7 +127,7 @@ interface TitleSignals {
 // pinned to MAL id 59708 because the cached mapping survives the must-
 // have-token fix below. Touching the prefix recomputes every srcmap on
 // first launch of the new build.
-const CACHE_PREFIX = "sakura_anime_v9_";
+const CACHE_PREFIX = "sakura_anime_v10_";
 const TTL_SEARCH = 30 * 60 * 1000;
 const TTL_TRENDING = 2 * 60 * 60 * 1000;
 const TTL_INFO = 24 * 60 * 60 * 1000;
@@ -695,11 +695,16 @@ async function resolveSourceMatch(
                 const providerInfo = await getAnimeInfo(candidate.slug);
                 animeId = providerInfo?.animeId || "";
             }
-            if (!animeId) {
-                return { candidate, animeId: "", episodes: [] as AnimeInfo["episodes"], finalScore: candidate.score };
+            let episodes: AnimeInfo["episodes"] = [];
+            if (animeId) {
+                setSlugForAnimeId(animeId, candidate.slug);
+                episodes = await loadEpisodesForAnimeId(animeId, { useCache: false });
+            } else if (Capacitor.isNativePlatform()) {
+                episodes = await loadNativeEpisodesForAnimeId(candidate.slug);
             }
-            setSlugForAnimeId(animeId, candidate.slug);
-            const episodes = await loadEpisodesForAnimeId(animeId, { useCache: false });
+            if (!animeId && episodes.length === 0) {
+                return { candidate, animeId: "", episodes, finalScore: candidate.score };
+            }
             let bonus = 0;
             if (expectedEpisodes > 0 && episodes.length > 0) {
                 const ratio = episodes.length / expectedEpisodes;
@@ -716,7 +721,7 @@ async function resolveSourceMatch(
     const rejectedReasons: string[] = [];
     for (const entry of enriched) {
         const { candidate, animeId, episodes } = entry;
-        if (!animeId) {
+        if (!animeId && episodes.length === 0) {
             rejectedReasons.push(`${candidate.slug}: missing animeId`);
             continue;
         }
@@ -731,7 +736,7 @@ async function resolveSourceMatch(
 
         const resolved: ResolvedSourceMatch = {
             slug: candidate.slug,
-            animeId,
+            animeId: animeId || candidate.slug,
             matchedTitle: candidate.title,
             score: entry.finalScore,
             query: candidate.query,
@@ -861,6 +866,14 @@ async function resolveNativeSourceMatch(
             cacheHit: false,
             episodes,
         };
+
+        cacheSet(mapKey, {
+            slug: resolved.slug,
+            animeId: resolved.animeId,
+            matchedTitle: resolved.matchedTitle,
+            score: resolved.score,
+            query: resolved.query,
+        }, TTL_SOURCE_MAP);
 
         _lastDiag += ` -> native src(${resolved.slug}, score=${resolved.score}, eps=${episodes.length})`;
         return resolved;

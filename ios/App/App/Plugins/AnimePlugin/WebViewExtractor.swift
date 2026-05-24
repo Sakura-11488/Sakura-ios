@@ -80,7 +80,7 @@ class WebViewExtractor: NSObject {
             if let host = url.host, let scheme = url.scheme {
                 referer = "\(scheme)://\(host)/"
             } else {
-                referer = "https://hianime.to/"
+                referer = "https://hianime.dk/"
             }
 
             debugLog += "Found m3u8: \(m3u8Url)\n"
@@ -114,7 +114,7 @@ class WebViewExtractor: NSObject {
 
         var request = URLRequest(url: url)
         request.setValue(Self.userAgent, forHTTPHeaderField: "User-Agent")
-        request.setValue("https://hianime.to/", forHTTPHeaderField: "Referer")
+        request.setValue("https://hianime.dk/", forHTTPHeaderField: "Referer")
         webView.load(request)
 
         DispatchQueue.main.asyncAfter(deadline: .now() + Self.extractionTimeout) {

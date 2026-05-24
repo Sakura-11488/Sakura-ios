@@ -1,7 +1,7 @@
 import * as cheerio from "cheerio";
 import { Capacitor, CapacitorHttp } from '@capacitor/core';
 
-const BASE_URL = "https://hianime.to";
+const BASE_URL = "https://hianime.dk";
 
 async function requestHianime(url: string, expectsJson = false) {
     if (Capacitor.isNativePlatform()) {

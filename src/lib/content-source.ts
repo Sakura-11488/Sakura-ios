@@ -11,7 +11,15 @@ async function requestMd(url: string) {
         const { CapacitorHttp } = await import("@capacitor/core");
         const response = await CapacitorHttp.get({ url });
         if (response.status >= 400) throw new Error(`HTTP Error: ${response.status}`);
-        return response.data;
+        const payload = response.data;
+        if (typeof payload === "string") {
+            try {
+                return JSON.parse(payload);
+            } catch {
+                return payload;
+            }
+        }
+        return payload;
     }
     const res = await fetch(url);
     if (!res.ok) throw new Error(`HTTP Error: ${res.status}`);
