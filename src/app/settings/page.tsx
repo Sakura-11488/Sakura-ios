@@ -679,7 +679,7 @@ export default function SettingsPage() {
                         <div className="setting-item">
                             <div className="setting-info">
                                 <span className="setting-name">Version</span>
-                                <span className="setting-desc">Sakura v1.2.1</span>
+                                <span className="setting-desc">Sakura v1.8.3</span>
                             </div>
                         </div>
                         <SettingsUpdateActions />

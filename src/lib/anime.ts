@@ -28,6 +28,14 @@ import {
     isPsyopEpisode,
     getPsyopStreamUrl,
 } from "./psyopAnime";
+import {
+    TWO_HE_ANIME_ID,
+    TWO_HE_ANIME_INFO,
+    TWO_HE_ANIME_SEARCH_RESULT,
+    getTwoHeAnimeStreamUrl,
+    isTwoHeAnimeEpisode,
+    matchesTwoHeAnimeQuery,
+} from "./2heAnime";
 
 export interface AnimeResult {
     id: string;
@@ -924,6 +932,11 @@ async function loadAnimeInfo(id: string, options: AnimeInfoRefreshOptions = {}):
         return BURNIE_SENDERS_INFO;
     }
 
+    if (id === TWO_HE_ANIME_ID) {
+        _lastDiag = `[2heanime] eps=${TWO_HE_ANIME_INFO.episodes.length}`;
+        return TWO_HE_ANIME_INFO;
+    }
+
     const cacheKey = `info_${id}`;
     if (!options.forceSourceRefresh) {
         const cached = cacheGet<AnimeInfo>(cacheKey);
@@ -1023,6 +1036,10 @@ export async function searchAnime(query: string): Promise<AnimeResult[]> {
 
     if (matchesBurnieSendersQuery(query)) {
         mapped.unshift(BURNIE_SENDERS_SEARCH_RESULT);
+    }
+
+    if (matchesTwoHeAnimeQuery(query)) {
+        mapped.unshift(TWO_HE_ANIME_SEARCH_RESULT);
     }
 
     if (mapped.length > 0) cacheSet(cacheKey, mapped, TTL_SEARCH);
@@ -1150,6 +1167,12 @@ export async function fetchEpisodeSources(
 ): Promise<StreamingSource | null> {
     if (isPsyopEpisode(episodeId)) {
         const url = getPsyopStreamUrl(episodeId);
+        if (!url) return null;
+        return { url, isM3U8: false };
+    }
+
+    if (isTwoHeAnimeEpisode(episodeId)) {
+        const url = getTwoHeAnimeStreamUrl(episodeId);
         if (!url) return null;
         return { url, isM3U8: false };
     }

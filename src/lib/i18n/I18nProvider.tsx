@@ -116,10 +116,24 @@ export function I18nProvider({ children }: { children: ReactNode }) {
     return <I18nContext.Provider value={value}>{children}</I18nContext.Provider>;
 }
 
+const fallbackI18nValue: I18nContextValue = {
+    locale: DEFAULT_LOCALE,
+    dir: getLocaleDirection(DEFAULT_LOCALE),
+    setLocale: () => {},
+    comradeTransition: null,
+    completeComradeTransition: () => {},
+    t: (key, values) => interpolate(defaultMessages[key] || key, values),
+    formatNumber: (number, options) => new Intl.NumberFormat(getIntlLocale(DEFAULT_LOCALE), options).format(number),
+    formatDate: (date, options) => new Intl.DateTimeFormat(getIntlLocale(DEFAULT_LOCALE), options).format(new Date(date)),
+};
+
 export function useI18n(): I18nContextValue {
     const context = useContext(I18nContext);
     if (!context) {
-        throw new Error("useI18n must be used within I18nProvider");
+        if (typeof window !== "undefined") {
+            console.warn("[i18n] useI18n called outside I18nProvider; using default locale.");
+        }
+        return fallbackI18nValue;
     }
     return context;
 }

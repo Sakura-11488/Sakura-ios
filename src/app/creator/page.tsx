@@ -9,9 +9,11 @@ import { getCreatorWorksByCreator } from "@/lib/creator-works";
 import { getWalletSakuraBalance } from "@/lib/treasury";
 import { truncateAddress } from "@/lib/solana";
 import MangaCard from "@/components/MangaCard";
+import AnimeCard from "@/components/AnimeCard";
 import Link from "next/link";
 import TipButton from "./TipButton";
 import { getDefaultMangaSourceId } from "@/lib/sources/source-ids";
+import { TWO_HE_ANIME_ID, TWO_HE_ANIME_INFO, TWO_HE_ANIME_SEARCH_RESULT, TWO_HE_CREATOR_WALLET } from "@/lib/2heAnime";
 
 function CreatorPageContent() {
     const searchParams = useSearchParams();
@@ -144,6 +146,8 @@ function CreatorPageContent() {
     const isVerified = creator?.is_verified === true;
     const avatarUrl = creator?.avatar_url || `https://robohash.org/${id}?set=set4&bgset=bg1`;
     const isOwnerProfile = Boolean(creator?.wallet_address && publicKey?.toBase58() === creator.wallet_address);
+    const isTwoHeCreator = id === TWO_HE_ANIME_ID || creator?.wallet_address === TWO_HE_CREATOR_WALLET;
+    const publishedWorkCount = mangaList.length + (isTwoHeCreator ? 1 : 0);
 
     const totalTipAmount = tips.reduce((sum, t) => sum + (t.amount_sol ?? 0), 0);
     const uniqueSupporters = new Set(tips.map((t) => t.sender_address)).size;
@@ -441,11 +445,20 @@ function CreatorPageContent() {
             {/* Published Works */}
             <div className="section-header" style={{ marginBottom: 12 }}>
                 <h2>Published Works</h2>
-                <span style={{ color: "var(--text-secondary)", fontSize: "0.9rem" }}>{mangaList.length} Series</span>
+                <span style={{ color: "var(--text-secondary)", fontSize: "0.9rem" }}>{publishedWorkCount} Series</span>
             </div>
 
-            {mangaList.length > 0 ? (
+            {publishedWorkCount > 0 ? (
                 <div className="manga-grid">
+                    {isTwoHeCreator && (
+                        <AnimeCard
+                            id={TWO_HE_ANIME_ID}
+                            title={TWO_HE_ANIME_INFO.title}
+                            image={TWO_HE_ANIME_INFO.image}
+                            type={TWO_HE_ANIME_SEARCH_RESULT.type}
+                            showMeta
+                        />
+                    )}
                     {mangaList.map((manga) => (
                         <MangaCard
                             key={manga.id}

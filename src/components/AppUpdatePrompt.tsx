@@ -250,6 +250,14 @@ export function SettingsUpdateActions() {
     const [busy, setBusy] = useState(false);
     const [availableUpdate, setAvailableUpdate] = useState<AppUpdateInfo | null>(null);
     const [downloadState, setDownloadState] = useState<AppUpdateDownloadEvent["state"] | null>(null);
+    const listenerRef = useRef<{ remove: () => void } | null>(null);
+
+    useEffect(() => {
+        return () => {
+            listenerRef.current?.remove();
+            listenerRef.current = null;
+        };
+    }, []);
 
     const handleCheck = async () => {
         setBusy(true);
@@ -276,6 +284,7 @@ export function SettingsUpdateActions() {
         setStatus("Downloading update in the app...");
 
         try {
+            listenerRef.current?.remove();
             const handle = await AppUpdateNative.addListener("downloadProgress", event => {
                 setDownloadState(event.state);
                 if (event.state === "downloading") setStatus(`Downloading update... ${event.progress}%`);
@@ -283,17 +292,26 @@ export function SettingsUpdateActions() {
                 if (event.state === "completed") setStatus("Tap Install on the system prompt to finish updating.");
                 if (event.state === "error") setStatus(event.message || "Download failed");
                 if (event.state === "needs_permission") setStatus(event.message || "Allow installs from Sakura, then try again.");
+                if (event.state === "completed" || event.state === "error" || event.state === "needs_permission") {
+                    listenerRef.current?.remove();
+                    listenerRef.current = null;
+                }
             });
+            listenerRef.current = handle;
 
             await startInAppUpdate(availableUpdate.manifest.apkUrl, event => {
                 setDownloadState(event.state);
                 if (event.message) setStatus(event.message);
+                if (event.state === "completed" || event.state === "error" || event.state === "needs_permission") {
+                    listenerRef.current?.remove();
+                    listenerRef.current = null;
+                }
             });
-
-            await handle.remove();
         } catch (error) {
             setDownloadState("error");
             setStatus(error instanceof Error ? error.message : "Download failed");
+            listenerRef.current?.remove();
+            listenerRef.current = null;
         }
     };
 

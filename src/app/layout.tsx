@@ -66,8 +66,8 @@ export default function RootLayout({
         </div>
 
         <HttpImageShim />
-        <SolanaProvider>
-          <I18nProvider>
+        <I18nProvider>
+          <SolanaProvider>
             <ComradeModeTransition />
             <TermsGate>
               <CloudSyncProvider />
@@ -77,8 +77,8 @@ export default function RootLayout({
               <FloatingTradeWidget />
               <BottomNav />
             </TermsGate>
-          </I18nProvider>
-        </SolanaProvider>
+          </SolanaProvider>
+        </I18nProvider>
       </body>
     </html>
   );
