@@ -74,7 +74,7 @@ function AnimeWatchInner() {
     const [error, setError] = useState<WatchErrorState | null>(null);
     const [nativePlaying, setNativePlaying] = useState(false);
     /** Native anime playback is available through platform plugins on iOS and Android. */
-    const [useNativePlayer] = useState(Capacitor.isNativePlatform());
+    const [useNativePlayer, setUseNativePlayer] = useState(Capacitor.isNativePlatform());
     const [playTriggered, setPlayTriggered] = useState(false);
     const [category, setCategory] = useState<"sub" | "dub">(getSavedCategory);
     const [availableCategories, setAvailableCategories] = useState<string[]>(["sub"]);
@@ -334,7 +334,19 @@ function AnimeWatchInner() {
             }
         } catch (playError) {
             console.error("[Anime] Native playback error:", playError);
-            setError(toWatchError(playError));
+            const code = (playError as { code?: string })?.code;
+            const message = (playError as { message?: string })?.message || "";
+            const isUnimplemented = code === "UNIMPLEMENTED"
+                || /unimplemented|not implemented/i.test(message);
+
+            if (isUnimplemented && source?.url) {
+                console.warn("[Anime] Native plugin unavailable - falling back to web player.");
+                setUseNativePlayer(false);
+                setPlayTriggered(false);
+                setError(null);
+            } else {
+                setError(toWatchError(playError));
+            }
         } finally {
             setNativePlaying(false);
         }
@@ -542,6 +554,20 @@ function AnimeWatchInner() {
                             {nativePlaying ? "Loading..." : "▶ Watch Episode"}
                         </button>
                     </div>
+                ) : source?.url && /\.(mp4|mov|m4v|webm)(\?|$)/i.test(source.url) ? (
+                    <video
+                        src={source.url}
+                        controls
+                        autoPlay
+                        playsInline
+                        style={{
+                            width: "100%",
+                            height: "100%",
+                            minHeight: "400px",
+                            background: "black",
+                            objectFit: "contain",
+                        }}
+                    />
                 ) : (
                     <iframe
                         src={source?.url}
